@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Side-by-Side PDF Viewer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    --bg: #1e1f22;
+    --panel-bg: #2b2d31;
+    --header-bg: #313338;
+    --border: #3f4147;
+    --text: #e3e5e8;
+    --muted: #94969c;
+    --accent: #5865f2;
+    --accent-hover: #4752c4;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+
+  #toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    height: 52px;
+  }
+  #toolbar h1 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 12px 0 0;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--accent-hover); }
+  .btn.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn.secondary:hover { background: #3a3c41; }
+  #syncToggleWrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    margin-left: auto;
+    user-select: none;
+    cursor: pointer;
+  }
+  #syncToggleWrap input { cursor: pointer; }
+
+  #dropHint {
+    position: fixed;
+    inset: 0;
+    top: 52px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(88,101,242,0.12);
+    border: 3px dashed var(--accent);
+    z-index: 50;
+    font-size: 22px;
+    color: var(--accent);
+    pointer-events: none;
+  }
+  #dropHint.active { display: flex; }
+
+  #container {
+    display: flex;
+    height: calc(100% - 52px);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  #emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--muted);
+    gap: 10px;
+    text-align: center;
+    padding: 20px;
+  }
+  #emptyState .big { font-size: 18px; color: var(--text); }
+
+  .pane {
+    flex: 1 0 420px;
+    min-width: 320px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: var(--panel-bg);
+    position: relative;
+  }
+  .pane-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .pane-title {
+    flex: 1;
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pane-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .icon-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    width: 26px;
+    height: 24px;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+  .icon-btn:hover { background: #3a3c41; }
+  .icon-btn.close-btn:hover { background: #da373c; border-color: #da373c; }
+  .zoom-label {
+    font-size: 11px;
+    color: var(--muted);
+    width: 38px;
+    text-align: center;
+  }
+  .page-label {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+
+  .pane-body {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0 40px;
+  }
+  .pane-body canvas {
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    background: white;
+    display: block;
+  }
+  .page-wrap {
+    position: relative;
+  }
+  .page-num-badge {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .pane-loading, .pane-error {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 40px 20px;
+    text-align: center;
+  }
+  .pane-error { color: #f26a6a; }
+
+  #fileInput { display: none; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>📑 PDF Side-by-Side</h1>
+  <button class="btn" id="addBtn">+ Add PDFs</button>
+  <button class="btn secondary" id="clearBtn">Clear All</button>
+  <label id="syncToggleWrap">
+    <input type="checkbox" id="syncScroll" />
+    Sync scrolling
+  </label>
+</div>
+
+<input type="file" id="fileInput" accept="application/pdf" multiple />
+
+<div id="dropHint">Drop PDF files anywhere to add them</div>
+
+<div id="container">
+  <div id="emptyState">
+    <div class="big">No PDFs loaded yet</div>
+    <div>Click "Add PDFs" or drag &amp; drop PDF files here to compare them side by side.</div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const container = document.getElementById('container');
+const emptyState = document.getElementById('emptyState');
+const fileInput = document.getElementById('fileInput');
+const addBtn = document.getElementById('addBtn');
+const clearBtn = document.getElementById('clearBtn');
+const dropHint = document.getElementById('dropHint');
+const syncScrollToggle = document.getElementById('syncScroll');
+
+let panes = [];
+let paneIdCounter = 0;
+let syncing = false;
+
+addBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => {
+  loadFiles(e.target.files);
+  fileInput.value = '';
+});
+
+clearBtn.addEventListener('click', () => {
+  panes.forEach(p => p.el.remove());
+  panes = [];
+  updateEmptyState();
+});
+
+// Drag & drop
+['dragenter', 'dragover'].forEach(evt => {
+  document.addEventListener(evt, (e) => {
+    e.preventDefault();
+    if (e.dataTransfer && Array.from(e.dataTransfer.items || []).some(i => i.kind === 'file')) {
+      dropHint.classList.add('active');
+    }
+  });
+});
+['dragleave', 'drop'].forEach(evt => {
+  document.addEventListener(evt, (e) => {
+    if (evt === 'dragleave' && e.target !== document && e.relatedTarget) return;
+    dropHint.classList.remove('active');
+  });
+});
+document.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropHint.classList.remove('active');
+  const files = Array.from(e.dataTransfer.files || []).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+  if (files.length) loadFiles(files);
+});
+
+function updateEmptyState() {
+  emptyState.style.display = panes.length === 0 ? 'flex' : 'none';
+}
+
+function loadFiles(fileList) {
+  const files = Array.from(fileList).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+  files.forEach(addPane);
+  updateEmptyState();
+}
+
+function addPane(file) {
+  const id = ++paneIdCounter;
+  const paneEl = document.createElement('div');
+  paneEl.className = 'pane';
+  paneEl.innerHTML = `
+    <div class="pane-header">
+      <div class="pane-title" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+      <div class="pane-controls">
+        <span class="page-label" data-role="pagecount">…</span>
+        <button class="icon-btn" data-action="zoomout" title="Zoom out">−</button>
+        <span class="zoom-label" data-role="zoom">100%</span>
+        <button class="icon-btn" data-action="zoomin" title="Zoom in">+</button>
+        <button class="icon-btn close-btn" data-action="close" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="pane-body" data-role="body">
+      <div class="pane-loading">Loading PDF…</div>
+    </div>
+  `;
+  container.appendChild(paneEl);
+
+  const pane = {
+    id,
+    el: paneEl,
+    file,
+    pdfDoc: null,
+    scale: 1.0,
+    body: paneEl.querySelector('[data-role="body"]'),
+    zoomLabel: paneEl.querySelector('[data-role="zoom"]'),
+    pageCountLabel: paneEl.querySelector('[data-role="pagecount"]'),
+  };
+  panes.push(pane);
+
+  paneEl.querySelector('[data-action="close"]').addEventListener('click', () => {
+    panes = panes.filter(p => p.id !== id);
+    paneEl.remove();
+    updateEmptyState();
+  });
+  paneEl.querySelector('[data-action="zoomin"]').addEventListener('click', () => rescale(pane, 0.15));
+  paneEl.querySelector('[data-action="zoomout"]').addEventListener('click', () => rescale(pane, -0.15));
+
+  pane.body.addEventListener('scroll', () => {
+    if (!syncScrollToggle.checked || syncing) return;
+    syncing = true;
+    const ratio = pane.body.scrollTop / Math.max(1, (pane.body.scrollHeight - pane.body.clientHeight));
+    panes.forEach(other => {
+      if (other.id === pane.id) return;
+      other.body.scrollTop = ratio * (other.body.scrollHeight - other.body.clientHeight);
+    });
+    requestAnimationFrame(() => { syncing = false; });
+  });
+
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const typedArray = new Uint8Array(reader.result);
+      const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+      pane.pdfDoc = pdf;
+      pane.pageCountLabel.textContent = `${pdf.numPages} pg`;
+      await renderAllPages(pane);
+    } catch (err) {
+      pane.body.innerHTML = `<div class="pane-error">Failed to load PDF:<br>${escapeHtml(err.message || String(err))}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function renderAllPages(pane) {
+  pane.body.innerHTML = '';
+  for (let pageNum = 1; pageNum <= pane.pdfDoc.numPages; pageNum++) {
+    const page = await pane.pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: pane.scale });
+
+    const wrap = document.createElement('div');
+    wrap.className = 'page-wrap';
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const badge = document.createElement('div');
+    badge.className = 'page-num-badge';
+    badge.textContent = `${pageNum} / ${pane.pdfDoc.numPages}`;
+    wrap.appendChild(canvas);
+    wrap.appendChild(badge);
+    pane.body.appendChild(wrap);
+
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+  }
+}
+
+function rescale(pane, delta) {
+  pane.scale = Math.min(3, Math.max(0.25, +(pane.scale + delta).toFixed(2)));
+  pane.zoomLabel.textContent = `${Math.round(pane.scale * 100)}%`;
+  if (pane.pdfDoc) renderAllPages(pane);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+
+</body>
+</html>

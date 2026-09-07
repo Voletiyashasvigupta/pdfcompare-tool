@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF Compare</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>PDF Compare</h1>
+      <p id="countLabel">No documents loaded</p>
+    </div>
+    <div class="actions">
+      <select id="layoutSelect" title="Layout" aria-label="Layout">
+        <option value="focus">Focus</option>
+        <option value="equal">Equal</option>
+        <option value="fixed">Fixed</option>
+      </select>
+      <button id="overviewButton">⊞ Overview</button>
+      <label class="check"><input id="syncCheck" type="checkbox"> Sync scrolling</label>
+      <button id="clearButton">Clear all</button>
+      <button class="primary" id="addButton">Add PDFs or ZIP</button>
+      <input id="fileInput" type="file" accept="application/pdf,.xlsx,.csv,.zip" multiple>
+    </div>
+  </header>
+
+  <main id="dropzone">
+    <section id="emptyState" class="empty-state">
+      <div class="empty-mark">PDF&nbsp;&nbsp;PDF&nbsp;&nbsp;PDF</div>
+      <h2>Compare documents side by side</h2>
+      <p>Drop PDFs, spreadsheets, or a ZIP of folders here, paste (Cmd/Ctrl+V) files copied from your file manager, or add them from your computer. Each document keeps its own zoom and scroll position.</p>
+      <button class="primary" id="emptyAddButton">Choose files or a ZIP</button>
+    </section>
+    <section id="panels" aria-label="PDF documents"></section>
+  </main>
+  <div id="expandBackdrop" hidden></div>
+  <section id="folderFocus" class="folder-focus" hidden role="dialog" aria-modal="true" aria-label="Selected app full-screen view">
+    <header class="folder-focus-header">
+      <div class="folder-focus-heading">
+        <strong id="folderFocusTitle"></strong>
+        <span id="folderFocusCount"></span>
+      </div>
+      <div class="folder-focus-actions">
+        <label class="check"><input id="folderFocusSync" type="checkbox"> Sync scrolling</label>
+        <button id="folderFocusClose" class="icon-button" title="Exit full screen (Esc)" aria-label="Exit full screen">×</button>
+      </div>
+    </header>
+    <div id="folderFocusFiles" class="folder-focus-files"></div>
+  </section>
+  <div id="toast" role="status"></div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
